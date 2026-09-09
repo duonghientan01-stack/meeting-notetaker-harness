@@ -13,6 +13,9 @@ import email
 from email.message import Message
 import hashlib
 import datetime
+import zipfile
+import xml.etree.ElementTree as ET
+import io
 from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
 
@@ -31,19 +34,90 @@ class ZeroExtractionError(Exception):
     """Raised when parsing extracts zero substantive content from a meeting."""
     pass
 
+def decode_mime_header(header_val: Optional[str]) -> str:
+    """Safely decode RFC 2047 MIME encoded headers (UTF-8, GB2312, etc.)."""
+    if not header_val:
+        return ""
+    try:
+        from email.header import decode_header
+        decoded_parts = []
+        for part, charset in decode_header(header_val):
+            if isinstance(part, bytes):
+                enc = charset or "utf-8"
+                try:
+                    decoded_parts.append(part.decode(enc, errors="replace"))
+                except Exception:
+                    decoded_parts.append(part.decode("latin-1", errors="replace"))
+            else:
+                decoded_parts.append(str(part))
+        return "".join(decoded_parts).strip()
+    except Exception:
+        return str(header_val).strip()
+
+def extract_docx_text(docx_bytes: bytes) -> str:
+    """Extract plain text from a .docx binary file using standard library zipfile and XML parser."""
+    try:
+        if not docx_bytes.startswith(b"PK"):
+            return ""
+        with zipfile.ZipFile(io.BytesIO(docx_bytes)) as docx:
+            if "word/document.xml" not in docx.namelist():
+                return ""
+            xml_content = docx.read("word/document.xml")
+            tree = ET.fromstring(xml_content)
+            namespaces = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = []
+            for p in tree.iterfind(".//w:p", namespaces):
+                texts = [node.text for node in p.iterfind(".//w:t", namespaces) if node.text]
+                if texts:
+                    paragraphs.append("".join(texts))
+            return "\n\n".join(paragraphs).strip()
+    except Exception:
+        return ""
+
 def extract_email_body(msg: Message) -> Tuple[str, str]:
-    """Extract plain text and HTML bodies from a parsed email Message."""
+    """Extract plain text, HTML bodies, and text from attached .docx or .txt files."""
     text_body = ""
     html_body = ""
+    attachment_texts = []
+
     if msg.is_multipart():
         for part in msg.walk():
             content_type = part.get_content_type()
             content_disposition = str(part.get("Content-Disposition", ""))
-            if "attachment" in content_disposition:
-                continue
+            raw_filename = part.get_filename() or ""
+            filename = decode_mime_header(raw_filename)
             payload = part.get_payload(decode=True)
             if not payload:
                 continue
+
+            # Check for Word (.docx) attachment
+            is_docx = (
+                filename.lower().endswith(".docx") or 
+                content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or
+                (isinstance(payload, bytes) and payload.startswith(b"PK") and (filename.lower().endswith(".docx") or not filename))
+            )
+            if is_docx and isinstance(payload, bytes):
+                doc_text = extract_docx_text(payload)
+                if doc_text:
+                    attachment_texts.append(f"--- [Attachment: {filename or 'Meeting_Notes.docx'}] ---\n{doc_text}")
+                continue
+
+            # Check for plain text (.txt) attachment
+            is_txt = (
+                "attachment" in content_disposition and 
+                (filename.lower().endswith(".txt") or content_type == "text/plain")
+            )
+            if is_txt and isinstance(payload, bytes):
+                charset = part.get_content_charset() or "utf-8"
+                txt_content = payload.decode(charset, errors="replace").strip()
+                if txt_content:
+                    attachment_texts.append(f"--- [Attachment: {filename or 'Transcript.txt'}] ---\n{txt_content}")
+                continue
+
+            # Ignore other attachments (images, zip, binaries, etc.)
+            if "attachment" in content_disposition:
+                continue
+
             charset = part.get_content_charset() or "utf-8"
             decoded_text = payload.decode(charset, errors="replace")
             if content_type == "text/plain":
@@ -57,7 +131,14 @@ def extract_email_body(msg: Message) -> Tuple[str, str]:
             text_body = payload.decode(charset, errors="replace")
             if msg.get_content_type() == "text/html":
                 html_body = text_body
-                
+
+    if attachment_texts:
+        joined_attachments = "\n\n".join(attachment_texts)
+        if text_body.strip():
+            text_body = text_body.strip() + "\n\n" + joined_attachments
+        else:
+            text_body = joined_attachments
+
     return text_body.strip(), html_body.strip()
 
 def check_format_fingerprint(subject: str, text_body: str, html_body: str) -> bool:
@@ -73,7 +154,8 @@ def check_format_fingerprint(subject: str, text_body: str, html_body: str) -> bo
     # 2. Structural marker: Must mention transcript, speakers, summary, tasks, or substantive meeting body
     has_transcript_marker = any(m in combined for m in [
         "transcript", "summary", "happyscribe.com", "recording", "speakers", "biên bản", "tóm tắt",
-        "action item", "action items", "task", "tasks", "nội dung", "kết luận", "deadline", "công việc"
+        "action item", "action items", "task", "tasks", "nội dung", "kết luận", "deadline", "công việc",
+        "attachment", "minutes", "meeting minutes", "agenda"
     ])
     if not has_transcript_marker and len(text_body.strip()) >= 30:
         has_transcript_marker = True
@@ -162,26 +244,6 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
         })
         
     return transcript_utterances
-
-def decode_mime_header(header_val: Optional[str]) -> str:
-    """Safely decode RFC 2047 MIME encoded headers (UTF-8, GB2312, etc.)."""
-    if not header_val:
-        return ""
-    try:
-        from email.header import decode_header
-        decoded_parts = []
-        for part, charset in decode_header(header_val):
-            if isinstance(part, bytes):
-                enc = charset or "utf-8"
-                try:
-                    decoded_parts.append(part.decode(enc, errors="replace"))
-                except Exception:
-                    decoded_parts.append(part.decode("latin-1", errors="replace"))
-            else:
-                decoded_parts.append(str(part))
-        return "".join(decoded_parts).strip()
-    except Exception:
-        return str(header_val).strip()
 
 def parse_email_to_envelope(raw_email_bytes: bytes,
                             archive_dir: Optional[Path] = None,
