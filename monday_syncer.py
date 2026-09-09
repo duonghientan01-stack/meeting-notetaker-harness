@@ -88,7 +88,22 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
     col_vals = {}
     
     # 1. Person assignment - ALWAYS guarantee a clear assignee on Monday (User requirement)
-    user_id = task.get("resolved_user_id") or DEFAULT_OWNER_ID
+    user_id = task.get("resolved_user_id")
+    if not user_id:
+        assignee_text = task.get("resolved_name") or task.get("raw_assignee") or ""
+        if assignee_text:
+            try:
+                try:
+                    from .user_resolver import resolve_assignee
+                except (ImportError, ValueError):
+                    from user_resolver import resolve_assignee
+                res = resolve_assignee(assignee_text)
+                user_id = res.get("resolved_user_id")
+            except Exception:
+                pass
+    if not user_id:
+        user_id = DEFAULT_OWNER_ID
+
     col_vals[COLUMNS["assign_to"]] = {
         "personsAndTeams": [{"id": int(user_id), "kind": "person"}]
     }
