@@ -217,6 +217,14 @@ def get_meeting(meeting_id: str, db_path: Optional[Path] = None) -> Optional[Dic
         return dict(row)
     return None
 
+def get_recent_meetings(limit: int = 10, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT meeting_id, title, status, created_at FROM meetings ORDER BY created_at DESC LIMIT ?", (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 def save_meeting(meeting: Dict[str, Any], db_path: Optional[Path] = None):
     conn = get_connection(db_path)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()

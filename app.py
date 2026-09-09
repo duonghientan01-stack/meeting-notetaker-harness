@@ -495,6 +495,13 @@ def discard_dlq_item(dlq_id: str, req: DiscardDLQRequest):
         "reason": req.reason
     }
 
+@app.get("/api/v1/meetings")
+def list_recent_meetings(limit: int = 10):
+    """List recent meetings processed by harness."""
+    return {
+        "meetings": db.get_recent_meetings(limit=limit)
+    }
+
 @app.get("/api/v1/meetings/{meeting_id}")
 def get_meeting_details(meeting_id: str):
     """Get meeting metadata and associated extracted tasks."""
