@@ -215,14 +215,22 @@ def sync_users_from_monday(monday_client_module=None, db_path: Optional[Path] = 
     Updates SQLite cache with user profiles, enabled flags, and aliases.
     """
     if monday_client_module is None:
-        import sys
         try:
-            from .config import WORKSPACE_DIR
+            from . import monday_client
+            monday_client_module = monday_client
         except (ImportError, ValueError):
-            from config import WORKSPACE_DIR
-        sys.path.insert(0, str(WORKSPACE_DIR / "tools"))
-        from importlib import import_module
-        monday_client_module = import_module("monday-client")
+            try:
+                import monday_client
+                monday_client_module = monday_client
+            except ImportError:
+                import sys
+                try:
+                    from .config import WORKSPACE_DIR
+                except (ImportError, ValueError):
+                    from config import WORKSPACE_DIR
+                sys.path.insert(0, str(WORKSPACE_DIR / "tools"))
+                from importlib import import_module
+                monday_client_module = import_module("monday-client")
     
     synced = []
     page = 1

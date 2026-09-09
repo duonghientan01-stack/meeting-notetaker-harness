@@ -30,7 +30,17 @@ except (ImportError, ValueError):
     import db
 
 def get_monday_client():
-    """Load tools/monday-client.py module dynamically."""
+    """Load monday_client module (local package or tools/monday-client.py)."""
+    try:
+        from . import monday_client
+        return monday_client
+    except (ImportError, ValueError):
+        pass
+    try:
+        import monday_client
+        return monday_client
+    except ImportError:
+        pass
     sys.path.insert(0, str(WORKSPACE_DIR / "tools"))
     from importlib import import_module
     return import_module("monday-client")
