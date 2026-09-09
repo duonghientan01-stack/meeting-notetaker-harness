@@ -76,8 +76,8 @@ SERVER_PORT = int(os.environ.get("PORT", 8000))
 WEBHOOK_SECRET = os.environ.get("HAPPYSCRIBE_WEBHOOK_SECRET", None)
 
 # LLM Reasoning Extractor Configuration (§5.2 & §9.3)
-DEFAULT_LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "google")  # "google", "anthropic", "openai"
-DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+DEFAULT_LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai")  # "openai", "google", "anthropic"
+DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 USE_LLM_EXTRACTOR = os.environ.get("USE_LLM_EXTRACTOR", "true").lower() in ("true", "1", "yes")
 
 # Model Pricing per 1M tokens (USD) for cost_ledger tracking

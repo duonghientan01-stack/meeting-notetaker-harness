@@ -10,6 +10,12 @@ services:
         value: 8000
       - key: DEFAULT_TIMEZONE
         value: Asia/Hong_Kong
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_API_KEY
+        sync: false
       - key: BUDGET_CAP_PER_MEETING_USD
         value: "0.50"
       - key: DAILY_BUDGET_CAP_USD
