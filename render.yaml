@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: meeting-notetaker-harness
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Hong_Kong
+      - key: BUDGET_CAP_PER_MEETING_USD
+        value: "0.50"
+      - key: DAILY_BUDGET_CAP_USD
+        value: "5.00"
+      - key: MONDAY_TOKEN
+        sync: false
+      - key: HAPPYSCRIBE_WEBHOOK_SECRET
+        generateValue: true

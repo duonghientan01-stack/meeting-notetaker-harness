@@ -1,0 +1,16 @@
+Message-ID: <hs_trans_004_minimal@happyscribe.com>
+Date: Mon, 07 Sep 2026 11:00:00 +0800
+From: "Happy Scribe" <transcripts@happyscribe.com>
+To: "Duong Tan" <tan.dh@poppingcandy.com.hk>
+Subject: Happy Scribe: Meeting Notes - Quick Sync
+Content-Type: text/plain; charset="utf-8"
+
+Your transcription from Happy Scribe is ready.
+Link: https://app.happyscribe.com/transcriptions/mini_004
+
+Summary:
+Brief check-in on project status and server metrics.
+
+Transcript:
+[00:01:00] Duong Tan: I will check the error rates on the server logs.
+[00:02:30] Mike Wong: Tan, please verify the webhook authentication by tomorrow.
