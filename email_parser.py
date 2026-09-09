@@ -94,6 +94,7 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
     pattern1 = re.compile(r'^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:]+):\s*(.*)$')
     pattern2 = re.compile(r'^([^:(]+)\s*\((\d{1,2}:\d{2}(?::\d{2})?)\):\s*(.*)$')
     pattern3 = re.compile(r'^([^:]+):\s*\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*(.*)$')
+    pattern4 = re.compile(r'^([A-ZÀ-Ỹ\u4e00-\u9fff][A-Za-zÀ-ỹ\s\u4e00-\u9fff]{1,30}):\s+(.*)$')
     
     current_speaker = "Unknown"
     current_ts = "00:00:00"
@@ -107,6 +108,7 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
         m1 = pattern1.match(line_s)
         m2 = pattern2.match(line_s)
         m3 = pattern3.match(line_s)
+        m4 = pattern4.match(line_s)
         
         if m1:
             if current_text:
@@ -137,6 +139,16 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
                 })
                 current_text = []
             current_speaker, current_ts, text = m3.group(1).strip(), m3.group(2), m3.group(3).strip()
+            current_text.append(text)
+        elif m4 and len(m4.group(1).split()) <= 4 and m4.group(1).lower() not in {"link", "subject", "from", "to", "date", "summary", "transcript", "note", "notes", "agenda"}:
+            if current_text:
+                transcript_utterances.append({
+                    "speaker": current_speaker,
+                    "timestamp": current_ts,
+                    "text": " ".join(current_text)
+                })
+                current_text = []
+            current_speaker, text = m4.group(1).strip(), m4.group(2).strip()
             current_text.append(text)
         else:
             if current_text:
