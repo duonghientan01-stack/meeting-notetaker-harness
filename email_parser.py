@@ -62,18 +62,22 @@ def extract_email_body(msg: Message) -> Tuple[str, str]:
 
 def check_format_fingerprint(subject: str, text_body: str, html_body: str) -> bool:
     """
-    Validate presence of essential structural markers from Happy Scribe notification templates.
+    Validate presence of essential structural markers from Happy Scribe notification templates or meeting emails.
     """
-    # 1. Subject check: must mention Happy Scribe, transcription, or meeting minutes
-    subj_pattern = r"(?:happy\s*scribe|transcription|meeting\s*notes|minutes|summary|\[mom\])"
+    # 1. Subject check: must mention Happy Scribe, transcription, meeting, minutes, or MOM
+    subj_pattern = r"(?:happy\s*scribe|transcription|meeting\s*notes|meeting|minutes|summary|\[mom\]|\bmom\b|biên\s*bản|họp)"
     if not re.search(subj_pattern, subject, re.IGNORECASE):
         return False
         
     combined = (text_body + " " + html_body).lower()
-    # 2. Structural marker: Must mention transcript, speakers, or summary
+    # 2. Structural marker: Must mention transcript, speakers, summary, tasks, or substantive meeting body
     has_transcript_marker = any(m in combined for m in [
-        "transcript", "summary", "happyscribe.com", "recording", "speakers", "biên bản", "tóm tắt"
+        "transcript", "summary", "happyscribe.com", "recording", "speakers", "biên bản", "tóm tắt",
+        "action item", "action items", "task", "tasks", "nội dung", "kết luận", "deadline", "công việc"
     ])
+    if not has_transcript_marker and len(text_body.strip()) >= 30:
+        has_transcript_marker = True
+
     return has_transcript_marker
 
 def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
