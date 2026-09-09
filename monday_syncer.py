@@ -218,7 +218,7 @@ def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, A
     
     # Target group: Post to dedicated Intake staging group so reviewer can review and move to proper board/group
     target_group = INTAKE_GROUP_ID
-    assignee_label = task.get("resolved_name") or "Cần duyệt Assignee"
+    assignee_label = task.get("resolved_name") or "Needs Review"
     prefix = task.get("title_prefix") or f"⚡ [{assignee_label}] "
     item_name = f"{prefix}{title}"
     col_values = build_column_values(task, idempotency_key=idempotency_key)

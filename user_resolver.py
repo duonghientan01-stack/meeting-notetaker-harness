@@ -55,12 +55,15 @@ def normalize_text(text: str) -> str:
     """
     Unicode-safe normalization:
     - Normalizes accents and Unicode forms.
+    - Strips English possessive markers ('s / ’s).
     - Preserves CJK ideographs and alphanumeric characters.
     - Strips punctuation and collapses whitespace.
     """
     if not text:
         return ""
     clean = remove_accents(text)
+    # Strip possessives: Tan's -> Tan, Leah’s -> Leah
+    clean = re.sub(r"['’]s\b", "", clean, flags=re.IGNORECASE)
     # Keep Unicode word characters (\w includes CJK unified ideographs) and spaces
     clean = re.sub(r'[^\w\s]', ' ', clean, flags=re.UNICODE)
     clean = clean.lower()
