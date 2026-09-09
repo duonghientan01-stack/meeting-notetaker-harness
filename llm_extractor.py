@@ -405,23 +405,59 @@ def _call_anthropic_api(prompt: str, model_name: str, api_key: str) -> Tuple[str
 
 
 def _call_openai_api(prompt: str, model_name: str, api_key: str) -> Tuple[str, int, int]:
-    """Call OpenAI GPT-4o-mini API."""
+    """Call OpenAI GPT-4o-mini API with automatic key sanitization and urllib fallback."""
     import openai
+    import json
+    import urllib.request
 
-    client = openai.OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model=model_name,
-        temperature=0.1,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    text = response.choices[0].message.content or "{}"
-    in_tokens = getattr(response.usage, "prompt_tokens", 0) or len(prompt) // 4
-    out_tokens = getattr(response.usage, "completion_tokens", 0) or len(text) // 4
-    return text, in_tokens, out_tokens
+    clean_key = api_key.strip().strip("'").strip('"').strip()
+    
+    # Attempt 1: Official OpenAI Python SDK
+    try:
+        client = openai.OpenAI(api_key=clean_key, timeout=45.0, max_retries=2)
+        response = client.chat.completions.create(
+            model=model_name,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        text = response.choices[0].message.content or "{}"
+        in_tokens = getattr(response.usage, "prompt_tokens", 0) or len(prompt) // 4
+        out_tokens = getattr(response.usage, "completion_tokens", 0) or len(text) // 4
+        return text, in_tokens, out_tokens
+    except Exception as sdk_err:
+        # Attempt 2: Direct HTTPS via urllib (bypasses httpx protocol/container issues)
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            payload_data = {
+                "model": model_name,
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload_data).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {clean_key}"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                text = data["choices"][0]["message"]["content"] or "{}"
+                usage = data.get("usage", {})
+                in_tokens = usage.get("prompt_tokens", len(prompt) // 4)
+                out_tokens = usage.get("completion_tokens", len(text) // 4)
+                return text, in_tokens, out_tokens
+        except Exception as urllib_err:
+            raise RuntimeError(f"OpenAI call failed via SDK ({sdk_err}) and urllib ({urllib_err})")
 
 
 # ---------------------------------------------------------------------------
@@ -471,18 +507,49 @@ class LLMExtractor:
         elif self.provider in ("google", "gemini") and (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
             api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
             full_prompt = f"{SYSTEM_PROMPT}\n\nMeeting Input:\n{formatted_prompt}"
-            raw_json, input_tokens, output_tokens = _call_gemini_api(full_prompt, self.model, api_key)
-            payload = LLMExtractionPayload.model_validate_json(raw_json)
+            try:
+                raw_json, input_tokens, output_tokens = _call_gemini_api(full_prompt, self.model, api_key)
+                payload = LLMExtractionPayload.model_validate_json(raw_json)
+            except Exception:
+                used_model = f"{self.model}-simulated-fallback"
+                payload, input_tokens, output_tokens = _deterministic_semantic_extractor(
+                    meeting=meeting,
+                    ref_date=ref_date,
+                    raw_transcript_text=raw_transcript_text
+                )
 
         elif self.provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
             api_key = os.environ.get("ANTHROPIC_API_KEY")
-            raw_json, input_tokens, output_tokens = _call_anthropic_api(formatted_prompt, self.model, api_key)
-            payload = LLMExtractionPayload.model_validate_json(raw_json)
+            try:
+                raw_json, input_tokens, output_tokens = _call_anthropic_api(formatted_prompt, self.model, api_key)
+                payload = LLMExtractionPayload.model_validate_json(raw_json)
+            except Exception:
+                used_model = f"{self.model}-simulated-fallback"
+                payload, input_tokens, output_tokens = _deterministic_semantic_extractor(
+                    meeting=meeting,
+                    ref_date=ref_date,
+                    raw_transcript_text=raw_transcript_text
+                )
 
         elif self.provider == "openai" and os.environ.get("OPENAI_API_KEY"):
             api_key = os.environ.get("OPENAI_API_KEY")
-            raw_json, input_tokens, output_tokens = _call_openai_api(formatted_prompt, self.model, api_key)
-            payload = LLMExtractionPayload.model_validate_json(raw_json)
+            try:
+                raw_json, input_tokens, output_tokens = _call_openai_api(formatted_prompt, self.model, api_key)
+                payload = LLMExtractionPayload.model_validate_json(raw_json)
+            except Exception as e:
+                # Log fallback and use deterministic semantic extractor so meeting is NEVER lost
+                db.log_event({
+                    "event_type": "LLM_FALLBACK_TRIGGERED",
+                    "status": "WARN",
+                    "error_str": str(e),
+                    "payload": {"meeting_id": meeting.meeting_id}
+                }, db_path=db_path)
+                used_model = f"{self.model}-simulated-fallback"
+                payload, input_tokens, output_tokens = _deterministic_semantic_extractor(
+                    meeting=meeting,
+                    ref_date=ref_date,
+                    raw_transcript_text=raw_transcript_text
+                )
 
         # 3. Deterministic Hermetic Fallback
         else:

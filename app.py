@@ -506,3 +506,55 @@ def get_meeting_details(meeting_id: str):
         "tasks_count": len(tasks),
         "tasks": tasks
     }
+
+@app.get("/api/v1/debug/openai")
+def debug_openai_connectivity():
+    """Diagnostic endpoint to inspect OpenAI API key cleanliness and live connection from the host/container."""
+    import traceback
+    import socket
+    import urllib.request
+
+    raw_key = os.environ.get("OPENAI_API_KEY", "")
+    clean_key = raw_key.strip().strip("'").strip('"').strip()
+    has_invisible_chars = raw_key != clean_key
+    masked = f"{clean_key[:7]}...{clean_key[-4:]}" if len(clean_key) > 12 else f"length={len(clean_key)}"
+
+    report = {
+        "raw_key_length": len(raw_key),
+        "clean_key_length": len(clean_key),
+        "has_invisible_chars": has_invisible_chars,
+        "masked_key": masked,
+    }
+
+    # Test DNS
+    try:
+        addr = socket.getaddrinfo("api.openai.com", 443)
+        report["dns_resolved_ips"] = [a[4][0] for a in addr[:3]]
+    except Exception as e:
+        report["dns_error"] = str(e)
+
+    # Test urllib direct
+    if clean_key:
+        try:
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {clean_key}"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                report["urllib_models_status"] = resp.status
+        except Exception as e:
+            report["urllib_error"] = str(e)
+
+    # Test OpenAI SDK
+    if clean_key:
+        try:
+            import openai
+            client = openai.OpenAI(api_key=clean_key, timeout=10.0)
+            models = client.models.list()
+            report["sdk_status"] = "OK"
+        except Exception as e:
+            report["sdk_error"] = str(e)
+            report["sdk_cause"] = repr(getattr(e, "__cause__", None))
+
+    return report
+
