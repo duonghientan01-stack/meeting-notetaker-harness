@@ -9,6 +9,7 @@ Guarantees (Hardened against B2 / B9 / B10 / F5 / F8):
 5. Observability /health with spend ledger, token check, and meeting freshness.
 6. Modern FastAPI lifespan context manager.
 """
+import os
 import hmac
 import hashlib
 import json
@@ -237,7 +238,7 @@ def process_meeting_pipeline(raw_payload: Dict[str, Any], dry_run: bool = False,
 def safe_background_pipeline(payload: Dict[str, Any]):
     """Background task wrapper catching unhandled exceptions and logging to DLQ (F8)."""
     try:
-        process_meeting_pipeline(payload, dry_run=False, require_approval=True)
+        process_meeting_pipeline(payload, dry_run=False, require_approval=getattr(config, "REQUIRE_HUMAN_APPROVAL", False))
     except Exception as e:
         meeting_id = payload.get("meeting_id", payload.get("meeting", {}).get("meeting_id", "meet_unhandled"))
         db.push_to_dlq(

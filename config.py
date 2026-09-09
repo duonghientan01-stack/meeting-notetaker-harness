@@ -29,23 +29,19 @@ USER_GROUP_MAP = {
     113703758: "group_mm6w488g",  # 🔵 TT task
 }
 
-# Immutable Column IDs for Board 5102468049 (Verified from live board schema dump docs/board-5102468049.schema.json)
+# Immutable Column IDs for Board 5102468049 (Verified from live board query)
 COLUMNS = {
-    "assign_to": "multiple_person_mm5rdfw6",      # "Assign to" (people)
+    "assign_to": "multiple_person_mm523asb",      # "Owner" (people)
     "owner": "multiple_person_mm523asb",          # "Owner" (people)
-    "monitor": "multiple_person_mm5zbcpt",        # "👀 Monitor" (people)
+    "monitor": "multiple_person_mm6w75qm",        # "👀 Monitor" (people)
     "status": "color_mm5ken0m",                  # "Status" (status)
-    "delivery_stage": "color_mm6c30sz",          # "Delivery Stage" (status)
     "project_health": "color_mm6cg534",          # "Project Health" (status)
     "priority": "color_mm6cawvp",                # "Priority" (status)
-    "due_date": "date_mm5j857k",                 # "Due Date" (date) - NOTE: date_mm52b8cp is Completed Date!
-    "assign_date": "date_mm5rxfx2",              # "Assign Date" (date)
+    "due_date": "date_mm6v7v2x",                 # "Due Date" (date)
     "workstream": "text_mm6c9xj9",               # "Workstream" (text)
-    "evidence": "long_text_mm6ckq93",            # "Evidence / Deliverable" (long_text)
-    "next_action": "long_text_mm6cpe4a",         # "Next Action" (long_text)
-    "proof_files": "file_mm6czjvf",              # "Proof Files" (file)
-    "proof_status": "color_mm6c6bgt",            # "Proof Status" (status)
-    "case_key": "text_mm5rkkrs",                 # "Case Key" (text) - used for idempotency key
+    "decision_required": "long_text_mm6c6f9s",   # "Decision Required" (long_text)
+    "kpi_impact": "long_text_mm6cgaxq",          # "KPI / Business Impact" (long_text)
+    "ai_cost": "numeric_mm6cjvtr",               # "AI Cost (Credits)" (numbers)
 }
 
 # Verified Status Labels for Board 5102468049
@@ -88,3 +84,6 @@ MODEL_PRICING = {
     "gpt-4o-mini": {"input_cost_per_1m": 0.15, "output_cost_per_1m": 0.60},
     "default": {"input_cost_per_1m": 0.10, "output_cost_per_1m": 0.40}
 }
+
+# Approval workflow: false = direct sync to Monday intake group; true = await web token digest
+REQUIRE_HUMAN_APPROVAL = os.environ.get("REQUIRE_HUMAN_APPROVAL", "false").lower() in ("true", "1", "yes")

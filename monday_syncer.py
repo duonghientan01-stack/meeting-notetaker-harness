@@ -51,39 +51,35 @@ def generate_task_idempotency_key(meeting_id: str, title: str, user_id: Optional
     key_src = f"{meeting_id}:{norm_title}:{user_id or 'unassigned'}"
     return hashlib.sha256(key_src.encode("utf-8")).hexdigest()
 
-def check_monday_item_exists(idempotency_key: str, monday_client=None) -> Optional[str]:
+def check_monday_item_exists(item_name: str, group_id: str, monday_client=None) -> Optional[str]:
     """
-    Check if an item with this idempotency key already exists on board 5102468049.
+    Check if an item with this name already exists in target group on Board 5102468049.
     Returns existing item_id if found, None otherwise.
     """
     client = monday_client or get_monday_client()
-    # Query items filtered by case_key column
     query = """
-    query ($board_id: ID!, $column_id: String!, $column_value: String!) {
-        items_page_by_column_values (
-            board_id: $board_id,
-            columns: [{column_id: $column_id, column_values: [$column_value]}],
-            limit: 1
-        ) {
-            items {
-                id
-                name
+    query ($board_id: [ID!], $group_id: [String!]) {
+        boards (ids: $board_id) {
+            groups (ids: $group_id) {
+                items_page (limit: 100) {
+                    items {
+                        id
+                        name
+                    }
+                }
             }
         }
     }
     """
-    variables = {
-        "board_id": str(BOARD_ID),
-        "column_id": COLUMNS["case_key"],
-        "column_value": idempotency_key
-    }
     try:
-        res = client.gql(query, variables)
-        items = res.get("items_page_by_column_values", {}).get("items", [])
-        if items:
-            return str(items[0]["id"])
+        res = client.gql(query, {"board_id": [str(BOARD_ID)], "group_id": [group_id]})
+        groups = res.get("boards", [{}])[0].get("groups", [])
+        if groups:
+            items = groups[0].get("items_page", {}).get("items", [])
+            for it in items:
+                if it["name"].strip() == item_name.strip():
+                    return str(it["id"])
     except Exception:
-        # Fallback: if items_page_by_column_values is not supported for this column type, continue
         pass
     return None
 
@@ -99,19 +95,18 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
 
     # 1b. Monitor assignment - default to monitor/coordinator; monitor can adjust later
     monitor_id = task.get("monitor_user_id") or DEFAULT_OWNER_ID
-    if monitor_id:
+    if monitor_id and "monitor" in COLUMNS:
         col_vals[COLUMNS["monitor"]] = {
             "personsAndTeams": [{"id": int(monitor_id), "kind": "person"}]
         }
         
-    # 2. Due Date (date_mm5j857k) - only if present
+    # 2. Due Date (date_mm6v7v2x) - only if present
     due_date = task.get("due_date")
     if due_date:
         col_vals[COLUMNS["due_date"]] = {"date": due_date}
         
-    # 3. Status (color_mm5ken0m): Must use valid label 'Not Started' (B4 / §7.2)
+    # 3. Status (color_mm5ken0m): Must use valid label 'Not Started'
     col_vals[COLUMNS["status"]] = {"label": DEFAULT_TASK_STATUS}
-    col_vals[COLUMNS["delivery_stage"]] = {"label": "Planned"}
     col_vals[COLUMNS["project_health"]] = {"label": "On Track"}
     
     # 4. Priority
@@ -123,15 +118,8 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
     # 5. Workstream
     workstream = task.get("workstream", "Automation, Delivery & Reliability")
     col_vals[COLUMNS["workstream"]] = workstream
-    
-    # 6. Evidence & Context quote (escaped length-capped text)
-    quote = task.get("context_quote", "")
-    evidence_text = f"Spoken context: {quote}"
-    col_vals[COLUMNS["evidence"]] = evidence_text[:500]
-    
-    # 7. Idempotency Key stored in Case Key column (B7 / §7.3)
-    if idempotency_key:
-        col_vals[COLUMNS["case_key"]] = idempotency_key
+        
+    return col_vals
         
     return col_vals
 
@@ -233,8 +221,8 @@ def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, A
         
     monday = get_monday_client()
     
-    # Pre-flight check: see if item already exists on Monday
-    existing_id = check_monday_item_exists(idempotency_key, monday_client=monday)
+    # Pre-flight check: see if item already exists in target group on Monday
+    existing_id = check_monday_item_exists(item_name, target_group, monday_client=monday)
     if existing_id:
         task["monday_item_id"] = existing_id
         task["status"] = "SYNCED_TO_MONDAY"
