@@ -163,6 +163,26 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
         
     return transcript_utterances
 
+def decode_mime_header(header_val: Optional[str]) -> str:
+    """Safely decode RFC 2047 MIME encoded headers (UTF-8, GB2312, etc.)."""
+    if not header_val:
+        return ""
+    try:
+        from email.header import decode_header
+        decoded_parts = []
+        for part, charset in decode_header(header_val):
+            if isinstance(part, bytes):
+                enc = charset or "utf-8"
+                try:
+                    decoded_parts.append(part.decode(enc, errors="replace"))
+                except Exception:
+                    decoded_parts.append(part.decode("latin-1", errors="replace"))
+            else:
+                decoded_parts.append(str(part))
+        return "".join(decoded_parts).strip()
+    except Exception:
+        return str(header_val).strip()
+
 def parse_email_to_envelope(raw_email_bytes: bytes,
                             archive_dir: Optional[Path] = None,
                             db_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -177,7 +197,7 @@ def parse_email_to_envelope(raw_email_bytes: bytes,
     """
     msg = email.message_from_bytes(raw_email_bytes)
     message_id = msg.get("Message-ID", f"msg_{hashlib.sha256(raw_email_bytes).hexdigest()[:16]}")
-    subject = msg.get("Subject", "Untitled Meeting Notification")
+    subject = decode_mime_header(msg.get("Subject", "Untitled Meeting Notification"))
     date_header = msg.get("Date", "")
     
     # 1. Archive raw email before parsing (B5 / §4.1)
