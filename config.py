@@ -21,12 +21,12 @@ DEFAULT_OWNER_ID = 113703761  # Duong Tan
 BOARD_ID = "5102468049"       # C-Team Board
 SUBITEM_BOARD_ID = "5102468050"
 
-# Target Board Groups
-INTAKE_GROUP_ID = "group_mm5r99dj"  # "NEW — Cross-Department Intake"
+# Target Board Groups on Board 5102468049
+INTAKE_GROUP_ID = "group_mm6w83gk"  # "NEW — Cross-Department Intake"
 USER_GROUP_MAP = {
-    113704803: "group_mm59ga7q",  # Leah's task
-    113703761: "group_mm59q7kt",  # Tan's task
-    113703758: "group_mm59jbqa",  # TT task
+    113704803: "group_mm6wyrry",  # 🟠 Leah's task
+    113703761: "group_mm6w6bys",  # 🟢 Tan's task
+    113703758: "group_mm6w488g",  # 🔵 TT task
 }
 
 # Immutable Column IDs for Board 5102468049 (Verified from live board schema dump docs/board-5102468049.schema.json)

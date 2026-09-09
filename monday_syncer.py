@@ -19,13 +19,13 @@ from pathlib import Path
 try:
     from .config import (
         BOARD_ID, INTAKE_GROUP_ID, USER_GROUP_MAP, COLUMNS,
-        DEFAULT_TASK_STATUS, WORKSPACE_DIR
+        DEFAULT_TASK_STATUS, WORKSPACE_DIR, DEFAULT_OWNER_ID
     )
     from . import db
 except (ImportError, ValueError):
     from config import (
         BOARD_ID, INTAKE_GROUP_ID, USER_GROUP_MAP, COLUMNS,
-        DEFAULT_TASK_STATUS, WORKSPACE_DIR
+        DEFAULT_TASK_STATUS, WORKSPACE_DIR, DEFAULT_OWNER_ID
     )
     import db
 
@@ -91,11 +91,17 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
     """Assemble column value payload using verified immutable column IDs."""
     col_vals = {}
     
-    # 1. Person assignment
-    user_id = task.get("resolved_user_id")
-    if user_id:
-        col_vals[COLUMNS["assign_to"]] = {
-            "personsAndTeams": [{"id": int(user_id), "kind": "person"}]
+    # 1. Person assignment - ALWAYS guarantee a clear assignee on Monday (User requirement)
+    user_id = task.get("resolved_user_id") or DEFAULT_OWNER_ID
+    col_vals[COLUMNS["assign_to"]] = {
+        "personsAndTeams": [{"id": int(user_id), "kind": "person"}]
+    }
+
+    # 1b. Monitor assignment - default to monitor/coordinator; monitor can adjust later
+    monitor_id = task.get("monitor_user_id") or DEFAULT_OWNER_ID
+    if monitor_id:
+        col_vals[COLUMNS["monitor"]] = {
+            "personsAndTeams": [{"id": int(monitor_id), "kind": "person"}]
         }
         
     # 2. Due Date (date_mm5j857k) - only if present
@@ -207,8 +213,10 @@ def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, A
     idempotency_key = task.get("idempotency_key") or generate_task_idempotency_key(meeting_id, title, resolved_user_id)
     task["idempotency_key"] = idempotency_key
     
-    target_group = USER_GROUP_MAP.get(resolved_user_id, INTAKE_GROUP_ID)
-    prefix = task.get("title_prefix") or "⚡ [Action Item] "
+    # Target group: Post to dedicated Intake staging group so reviewer can review and move to proper board/group
+    target_group = INTAKE_GROUP_ID
+    assignee_label = task.get("resolved_name") or "Cần duyệt Assignee"
+    prefix = task.get("title_prefix") or f"⚡ [{assignee_label}] "
     item_name = f"{prefix}{title}"
     col_values = build_column_values(task, idempotency_key=idempotency_key)
     
