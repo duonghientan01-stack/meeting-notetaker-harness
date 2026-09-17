@@ -200,6 +200,7 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
     Supports Dual-Mode Ingestion:
     - Mode A: Timestamped Dialogue Transcript ([00:12:04] Speaker: Text)
     - Mode B: Thematic / Structured MoM Document (Sections: Visual Direction, Timeline, Action Items)
+    - Bullet point stripping: Recognizes items formatted with -, *, •, 1., 2)
     """
     lines = text_body.splitlines()
     pattern1 = re.compile(r'^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:]+):\s*(.*)$')
@@ -219,11 +220,16 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
         line_s = line.strip()
         if not line_s or is_footer_line(line_s):
             continue
+
+        # Strip bullet points/list markers: -, *, •, –, —, 1., 2), (1) for pattern matching
+        clean_cand = re.sub(r'^[ \t]*[-*•–—]+[ \t]*', '', line_s)
+        clean_cand = re.sub(r'^\(?\d+[\.\)][ \t]*', '', clean_cand).strip()
+        target_line = clean_cand if clean_cand else line_s
             
-        m1 = pattern1.match(line_s)
-        m2 = pattern2.match(line_s)
-        m3 = pattern3.match(line_s)
-        m4 = pattern4.match(line_s)
+        m1 = pattern1.match(target_line)
+        m2 = pattern2.match(target_line)
+        m3 = pattern3.match(target_line)
+        m4 = pattern4.match(target_line)
         
         if m1:
             if current_text and current_speaker:
@@ -249,11 +255,11 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
                 current_text = []
             current_speaker, text = m4.group(1).strip(), m4.group(2).strip()
             current_text.append(text)
-        elif not has_timestamps and is_section_header(line_s):
+        elif not has_timestamps and is_section_header(target_line):
             if current_text and current_speaker:
                 transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
                 current_text = []
-            current_speaker = f"Section: {line_s.lstrip('#').strip().rstrip(':')}"
+            current_speaker = f"Section: {target_line.lstrip('#').strip().rstrip(':')}"
         else:
             if current_speaker:
                 current_text.append(line_s)
@@ -275,22 +281,48 @@ def parse_email_to_envelope(raw_email_bytes: bytes,
     - Computes content_hash exclusively over normalized transcript text.
     - Emits MeetingEnvelope v1 schema.
     """
-    msg = email.message_from_bytes(raw_email_bytes)
-    message_id = msg.get("Message-ID", f"msg_{hashlib.sha256(raw_email_bytes).hexdigest()[:16]}")
-    subject = decode_mime_header(msg.get("Subject", "Untitled Meeting Notification"))
-    date_header = msg.get("Date", "")
+    is_json = False
+    json_data = {}
+    trimmed = raw_email_bytes.strip()
+    if trimmed.startswith(b"{") and trimmed.endswith(b"}"):
+        try:
+            import json as _json
+            json_data = _json.loads(trimmed.decode("utf-8"))
+            is_json = True
+        except Exception:
+            is_json = False
+
+    if is_json:
+        message_id = json_data.get("message_id") or json_data.get("id") or f"msg_{hashlib.sha256(raw_email_bytes).hexdigest()[:16]}"
+        subject = json_data.get("subject", "Untitled Meeting Notification")
+        date_header = json_data.get("date", "")
+        text_body = json_data.get("body") or json_data.get("text_body") or ""
+        html_body = json_data.get("html_body", "")
+        participants_data = json_data.get("participants", [])
+    else:
+        msg = email.message_from_bytes(raw_email_bytes)
+        message_id = msg.get("Message-ID", f"msg_{hashlib.sha256(raw_email_bytes).hexdigest()[:16]}")
+        subject = decode_mime_header(msg.get("Subject", "Untitled Meeting Notification"))
+        date_header = msg.get("Date", "")
+        text_body, html_body = extract_email_body(msg)
+        participants_data = []
+        from_header = msg.get("From", "")
+        to_header = msg.get("To", "")
+        for h in [from_header, to_header]:
+            if h:
+                real_name, addr = email.utils.parseaddr(h)
+                if addr:
+                    participants_data.append({"name": real_name or addr.split("@")[0], "email": addr})
     
     # 1. Archive raw email before parsing (B5 / §4.1)
     target_archive = archive_dir or RAW_ARCHIVE_DIR
     clean_msg_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', message_id)
-    archive_file = target_archive / f"{clean_msg_id}.eml"
+    archive_file = target_archive / f"{clean_msg_id}.{'json' if is_json else 'eml'}"
     try:
         archive_file.write_bytes(raw_email_bytes)
     except Exception as e:
         pass
         
-    text_body, html_body = extract_email_body(msg)
-    
     # 2. Check format fingerprint contract (B5 / §4.1)
     if not check_format_fingerprint(subject, text_body, html_body):
         err_msg = f"UNKNOWN_EMAIL_FORMAT: Email '{subject}' failed format fingerprint contract."
@@ -306,6 +338,9 @@ def parse_email_to_envelope(raw_email_bytes: bytes,
     meeting_title = subject
     if "[MoM]" in subject:
         meeting_title = subject[subject.index("[MoM]"):].strip()
+    elif "[mom]" in subject.lower():
+        idx = subject.lower().index("[mom]")
+        meeting_title = subject[idx:].strip()
         
     # Extract recording link if present
     rec_url_match = re.search(r'https://app\.happyscribe\.com/[^\s<>"\'\)]+', text_body + " " + html_body)
@@ -324,23 +359,19 @@ def parse_email_to_envelope(raw_email_bytes: bytes,
                 "text": p
             })
             
-    # 5. Extract attendees from headers or body
-    participants = []
-    from_header = msg.get("From", "")
-    to_header = msg.get("To", "")
-    for h in [from_header, to_header]:
-        if h:
-            real_name, addr = email.utils.parseaddr(h)
-            if addr:
-                participants.append({"name": real_name or addr.split("@")[0], "email": addr})
-                
-    # Unique participants
+    # 5. Extract attendees from headers, json, or body
     unique_participants = []
     seen_emails = set()
-    for p in participants:
-        if p["email"] not in seen_emails:
-            seen_emails.add(p["email"])
-            unique_participants.append(p)
+    for p in participants_data:
+        if isinstance(p, dict):
+            em = p.get("email", "")
+            if em and em not in seen_emails:
+                seen_emails.add(em)
+                unique_participants.append(p)
+            elif not em and p.get("name"):
+                unique_participants.append(p)
+        elif isinstance(p, str):
+            unique_participants.append({"name": p, "email": ""})
             
     # 6. Compute normalized transcript text and content_hash (F6 / §4.5)
     normalized_transcript_text = " ".join([f"{u['speaker']}:{u['text']}" for u in transcript_utterances])

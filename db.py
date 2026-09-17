@@ -149,6 +149,7 @@ def init_db(db_path: Optional[Path] = None):
     ensure_column("tasks", "idempotency_key", "TEXT")
     ensure_column("tasks", "due_date_source", "TEXT DEFAULT 'absent'")
     ensure_column("tasks", "approval_status", "TEXT DEFAULT 'PENDING_APPROVAL'")
+    ensure_column("tasks", "resolved_user_ids", "TEXT")
     ensure_column("meetings", "timezone", "TEXT DEFAULT 'Asia/Hong_Kong'")
     ensure_column("dlq", "resolution_notes", "TEXT")
     
@@ -257,17 +258,19 @@ def save_meeting(meeting: Dict[str, Any], db_path: Optional[Path] = None):
 def save_task(task: Dict[str, Any], db_path: Optional[Path] = None):
     conn = get_connection(db_path)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    resolved_uids_json = json.dumps(task.get("resolved_user_ids", []))
     
     with conn:
         conn.execute("""
         INSERT INTO tasks (
             task_id, meeting_id, idempotency_key, title, description, raw_assignee,
-            resolved_user_id, resolved_name, resolved_email, resolution_tier,
+            resolved_user_id, resolved_user_ids, resolved_name, resolved_email, resolution_tier,
             due_date, due_date_source, priority, workstream, context_quote, confidence_score,
             quality_gate_passed, approval_status, monday_item_id, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(task_id) DO UPDATE SET
             resolved_user_id=excluded.resolved_user_id,
+            resolved_user_ids=excluded.resolved_user_ids,
             resolved_name=excluded.resolved_name,
             resolved_email=excluded.resolved_email,
             resolution_tier=excluded.resolution_tier,
@@ -284,6 +287,7 @@ def save_task(task: Dict[str, Any], db_path: Optional[Path] = None):
             task.get("description", ""),
             task.get("raw_assignee", ""),
             task.get("resolved_user_id"),
+            resolved_uids_json,
             task.get("resolved_name"),
             task.get("resolved_email"),
             task.get("resolution_tier"),
@@ -307,7 +311,18 @@ def get_tasks_for_meeting(meeting_id: str, db_path: Optional[Path] = None) -> Li
     cursor.execute("SELECT * FROM tasks WHERE meeting_id = ?", (meeting_id,))
     rows = cursor.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    tasks = []
+    for r in rows:
+        d = dict(r)
+        if d.get("resolved_user_ids"):
+            try:
+                d["resolved_user_ids"] = json.loads(d["resolved_user_ids"])
+            except Exception:
+                d["resolved_user_ids"] = []
+        else:
+            d["resolved_user_ids"] = []
+        tasks.append(d)
+    return tasks
 
 def get_task_by_idempotency_key(meeting_id: str, idempotency_key: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
     conn = get_connection(db_path)

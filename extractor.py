@@ -56,6 +56,7 @@ class ExtractedTask(BaseModel):
     description: str = ""
     raw_assignee: str = ""
     resolved_user_id: Optional[int] = None
+    resolved_user_ids: List[int] = Field(default_factory=list)
     resolved_name: Optional[str] = None
     resolved_email: Optional[str] = None
     resolution_tier: Optional[str] = None

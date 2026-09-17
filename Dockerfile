@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy harness code
 COPY . /app/meeting-notetaker-harness
+WORKDIR /app/meeting-notetaker-harness
 
 # Persistent volume directory for SQLite and raw email archive
 RUN mkdir -p /app/meeting-notetaker-harness/data /app/meeting-notetaker-harness/data/raw_emails \
@@ -32,4 +33,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["sh", "-c", "uvicorn meeting-notetaker-harness.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]

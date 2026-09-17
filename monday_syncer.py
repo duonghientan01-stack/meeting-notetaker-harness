@@ -13,6 +13,8 @@ import json
 import sys
 import html
 import hashlib
+import uuid
+import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
@@ -109,25 +111,31 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
     col_vals = {}
     
     # 1. Person assignment - ALWAYS guarantee a clear assignee on Monday (User requirement)
-    user_id = task.get("resolved_user_id")
-    if not user_id:
-        assignee_text = task.get("resolved_name") or task.get("raw_assignee") or ""
-        if assignee_text:
-            try:
+    resolved_user_ids = task.get("resolved_user_ids") or []
+    if resolved_user_ids:
+        col_vals[COLUMNS["assign_to"]] = {
+            "personsAndTeams": [{"id": int(uid), "kind": "person"} for uid in resolved_user_ids]
+        }
+    else:
+        user_id = task.get("resolved_user_id")
+        if not user_id:
+            assignee_text = task.get("resolved_name") or task.get("raw_assignee") or ""
+            if assignee_text:
                 try:
-                    from .user_resolver import resolve_assignee
-                except (ImportError, ValueError):
-                    from user_resolver import resolve_assignee
-                res = resolve_assignee(assignee_text)
-                user_id = res.get("resolved_user_id")
-            except Exception:
-                pass
-    if not user_id:
-        user_id = DEFAULT_OWNER_ID
+                    try:
+                        from .user_resolver import resolve_assignee
+                    except (ImportError, ValueError):
+                        from user_resolver import resolve_assignee
+                    res = resolve_assignee(assignee_text)
+                    user_id = res.get("resolved_user_id")
+                except Exception:
+                    pass
+        if not user_id:
+            user_id = DEFAULT_OWNER_ID
 
-    col_vals[COLUMNS["assign_to"]] = {
-        "personsAndTeams": [{"id": int(user_id), "kind": "person"}]
-    }
+        col_vals[COLUMNS["assign_to"]] = {
+            "personsAndTeams": [{"id": int(user_id), "kind": "person"}]
+        }
 
     # 1b. Monitor assignment - C-Team Governance
     monitor_ids = task.get("monitor_user_ids")
@@ -268,19 +276,22 @@ def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, A
     
     # Target group: Post to dedicated Intake staging group so reviewer can review and move to proper board/group
     target_group = INTAKE_GROUP_ID
+
+    # Enforce clean title: strip any [Name] or Name: prefix
+    clean_title = title.strip()
+    clean_title = re.sub(r"^\[[^\]]+\]\s*", "", clean_title).strip()
+    clean_title = re.sub(r"^[A-Za-zÀ-ỹ\s]{1,30}:\s*", "", clean_title).strip()
+
     if task.get("title_prefix"):
         prefix = task["title_prefix"]
-    elif not resolved_user_id or task.get("resolved_name") == "Needs Review":
+    elif not resolved_user_id and not task.get("resolved_user_ids") and task.get("resolved_name") == "Needs Review":
         prefix = "⚡ [Needs Review] "
-    elif getattr(config, "INCLUDE_PERSON_PREFIX_IN_TITLE", False):
-        assignee_label = task.get("resolved_name") or task.get("raw_assignee") or ""
-        prefix = f"⚡ [{assignee_label}] " if assignee_label else "⚡ "
     elif getattr(config, "INCLUDE_AI_BADGE_IN_TITLE", True):
         prefix = "⚡ "
     else:
         prefix = ""
 
-    item_name = f"{prefix}{title}"
+    item_name = f"{prefix}{clean_title}"
     col_values = build_column_values(task, idempotency_key=idempotency_key)
     
     if dry_run:
