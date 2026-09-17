@@ -162,29 +162,62 @@ def check_format_fingerprint(subject: str, text_body: str, html_body: str) -> bo
 
     return has_transcript_marker
 
+FOOTER_PATTERNS = [
+    r"supercharge your meetings with ai",
+    r"get summaries, answers, and much more",
+    r"ask anything about this meeting",
+    r"what'?s happyscribe'?s ai notetaker",
+    r"happyscribe[’']s ai notetaker helps you",
+    r"manage notetaker settings",
+    r"if you don'?t want to receive meeting summaries",
+    r"you can change your notification settings",
+    r"to stop receiving meeting summaries",
+    r"unsubscribe"
+]
+
+SECTION_KEYWORDS = [
+    "visual direction", "storyboard", "production workflow", "audio", "timeline",
+    "coordination", "action items", "next steps", "key decisions", "decisions",
+    "summary", "meeting summary", "agenda", "discussion", "recap", "notes"
+]
+
+def is_footer_line(line: str) -> bool:
+    low = line.lower().strip()
+    return any(re.search(pat, low) for pat in FOOTER_PATTERNS)
+
+def is_section_header(line: str) -> bool:
+    s = line.strip()
+    if s.startswith("#"):
+        return True
+    low = s.lower().rstrip(":")
+    if any(kw == low or low.startswith(kw) or low.endswith(kw) for kw in SECTION_KEYWORDS):
+        return len(s.split()) <= 7
+    return False
+
 def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
     """
-    Parse speaker, timestamp, and utterance lines from Happy Scribe notification text.
-    Patterns handled:
-    - [00:12:04] Mike Wong: ...
-    - Mike Wong (00:12:04): ...
-    - Mike Wong: [00:12:04] ...
+    Parse speaker, timestamp, section, and utterance lines from Happy Scribe notification text or MoM recaps.
+    Supports Dual-Mode Ingestion:
+    - Mode A: Timestamped Dialogue Transcript ([00:12:04] Speaker: Text)
+    - Mode B: Thematic / Structured MoM Document (Sections: Visual Direction, Timeline, Action Items)
     """
-    transcript_utterances = []
     lines = text_body.splitlines()
-    
     pattern1 = re.compile(r'^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:]+):\s*(.*)$')
     pattern2 = re.compile(r'^([^:(]+)\s*\((\d{1,2}:\d{2}(?::\d{2})?)\):\s*(.*)$')
     pattern3 = re.compile(r'^([^:]+):\s*\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*(.*)$')
-    pattern4 = re.compile(r'^([A-ZÀ-Ỹ\u4e00-\u9fff][A-Za-zÀ-ỹ\s\u4e00-\u9fff]{1,30}):\s+(.*)$')
+    pattern4 = re.compile(r'^([A-ZÀ-Ỹ\u4e00-\u9fff][A-Za-zÀ-ỹ\s/\-\(\)\u4e00-\u9fff]{1,35}):\s+(.*)$')
     
-    current_speaker = "Unknown"
+    # Check if text contains timestamped utterances (Mode A)
+    has_timestamps = any(pattern1.match(l.strip()) or pattern2.match(l.strip()) or pattern3.match(l.strip()) for l in lines)
+    
+    transcript_utterances = []
+    current_speaker = "Meeting Context" if not has_timestamps else ""
     current_ts = "00:00:00"
     current_text = []
     
     for line in lines:
         line_s = line.strip()
-        if not line_s:
+        if not line_s or is_footer_line(line_s):
             continue
             
         m1 = pattern1.match(line_s)
@@ -193,55 +226,40 @@ def parse_transcript_lines(text_body: str) -> List[Dict[str, Any]]:
         m4 = pattern4.match(line_s)
         
         if m1:
-            if current_text:
-                transcript_utterances.append({
-                    "speaker": current_speaker,
-                    "timestamp": current_ts,
-                    "text": " ".join(current_text)
-                })
+            if current_text and current_speaker:
+                transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
                 current_text = []
             current_ts, current_speaker, text = m1.group(1), m1.group(2).strip(), m1.group(3).strip()
             current_text.append(text)
         elif m2:
-            if current_text:
-                transcript_utterances.append({
-                    "speaker": current_speaker,
-                    "timestamp": current_ts,
-                    "text": " ".join(current_text)
-                })
+            if current_text and current_speaker:
+                transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
                 current_text = []
             current_speaker, current_ts, text = m2.group(1).strip(), m2.group(2), m2.group(3).strip()
             current_text.append(text)
         elif m3 and len(m3.group(1).split()) <= 4:
-            if current_text:
-                transcript_utterances.append({
-                    "speaker": current_speaker,
-                    "timestamp": current_ts,
-                    "text": " ".join(current_text)
-                })
+            if current_text and current_speaker:
+                transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
                 current_text = []
             current_speaker, current_ts, text = m3.group(1).strip(), m3.group(2), m3.group(3).strip()
             current_text.append(text)
         elif m4 and len(m4.group(1).split()) <= 4 and m4.group(1).lower() not in {"link", "subject", "from", "to", "date", "summary", "transcript", "note", "notes", "agenda"}:
-            if current_text:
-                transcript_utterances.append({
-                    "speaker": current_speaker,
-                    "timestamp": current_ts,
-                    "text": " ".join(current_text)
-                })
+            if current_text and current_speaker:
+                transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
                 current_text = []
             current_speaker, text = m4.group(1).strip(), m4.group(2).strip()
             current_text.append(text)
+        elif not has_timestamps and is_section_header(line_s):
+            if current_text and current_speaker:
+                transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
+                current_text = []
+            current_speaker = f"Section: {line_s.lstrip('#').strip().rstrip(':')}"
         else:
-            if current_text:
+            if current_speaker:
                 current_text.append(line_s)
                 
-    if current_text:
-        transcript_utterances.append({
-            "speaker": current_speaker,
-            "timestamp": current_ts,
-            "text": " ".join(current_text)
-        })
+    if current_text and current_speaker:
+        transcript_utterances.append({"speaker": current_speaker, "timestamp": current_ts, "text": " ".join(current_text)})
         
     return transcript_utterances
 

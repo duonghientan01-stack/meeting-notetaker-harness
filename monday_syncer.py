@@ -19,15 +19,15 @@ from pathlib import Path
 try:
     from .config import (
         BOARD_ID, INTAKE_GROUP_ID, USER_GROUP_MAP, COLUMNS,
-        DEFAULT_TASK_STATUS, WORKSPACE_DIR, DEFAULT_OWNER_ID
+        DEFAULT_TASK_STATUS, WORKSPACE_DIR, DEFAULT_OWNER_ID, DEFAULT_WORKSTREAM
     )
-    from . import db
+    from . import db, config
 except (ImportError, ValueError):
     from config import (
         BOARD_ID, INTAKE_GROUP_ID, USER_GROUP_MAP, COLUMNS,
-        DEFAULT_TASK_STATUS, WORKSPACE_DIR, DEFAULT_OWNER_ID
+        DEFAULT_TASK_STATUS, WORKSPACE_DIR, DEFAULT_OWNER_ID, DEFAULT_WORKSTREAM
     )
-    import db
+    import db, config
 
 def get_monday_client():
     """Load monday_client module (local package or tools/monday-client.py)."""
@@ -131,10 +131,8 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
     col_vals[COLUMNS["priority"]] = {"label": priority}
     
     # 5. Workstream
-    workstream = task.get("workstream", "Automation, Delivery & Reliability")
+    workstream = task.get("workstream") or config.DEFAULT_WORKSTREAM
     col_vals[COLUMNS["workstream"]] = workstream
-        
-    return col_vals
         
     return col_vals
 
@@ -158,8 +156,13 @@ def build_html_update(task: Dict[str, Any], meeting_meta: Optional[Dict[str, Any
     confidence = float(task.get("confidence_score", 0.0)) * 100
     due_date_str = html.escape(str(task.get("due_date") or "Not specified (open timeline)"))
     priority_str = html.escape(str(task.get("priority", "Medium")))
-    workstream_str = html.escape(str(task.get("workstream", "Automation, Delivery & Reliability")))
+    workstream_str = html.escape(str(task.get("workstream", config.DEFAULT_WORKSTREAM)))
+    phase_str = html.escape(str(task.get("phase", "Phase 1")))
     
+    # Technical Guidelines / Context block
+    tech_context = task.get("technical_context") or ""
+    tech_context_html = f'<div style="background:#f0f7ff;border-left:4px solid #0073ea;padding:10px;margin-bottom:12px;border-radius:4px;"><b>🛠️ Technical Guidelines & Context:</b><br>{html.escape(tech_context)}</div>' if tech_context else ''
+
     # Security: HTML escape transcript quote (F8 / §7.4)
     raw_quote = task.get("context_quote", "No direct quote captured.")
     escaped_quote = html.escape(str(raw_quote))
@@ -175,18 +178,21 @@ def build_html_update(task: Dict[str, Any], meeting_meta: Optional[Dict[str, Any
 <p>This item was extracted from <b>{meeting_title}</b> with grounded evidence.</p>
 
 <ul>
+  <li><b>Phase:</b> {phase_str}</li>
   <li><b>Assignee:</b> {assigned_info} (Resolution: <code>{tier_info}</code>, Confidence: {confidence:.0f}%)</li>
   <li><b>Due Date:</b> {due_date_str}</li>
   <li><b>Priority:</b> {priority_str}</li>
   <li><b>Workstream:</b> {workstream_str}</li>
 </ul>
 
+{tech_context_html}
+
 <h3>💬 Spoken Context in Meeting:</h3>
 <blockquote>{escaped_quote}</blockquote>
 
 {rec_link_html}
 <hr>
-<p><i>Harness: meeting-notetaker-harness v3.0 | Status: Shadow/Assisted Mode</i></p>
+<p><i>Harness: meeting-notetaker-harness v3.1 | Status: Shadow/Assisted Mode</i></p>
 """
 
 def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, Any]] = None,
@@ -218,7 +224,10 @@ def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, A
     
     # Target group: Post to dedicated Intake staging group so reviewer can review and move to proper board/group
     target_group = INTAKE_GROUP_ID
-    assignee_label = task.get("resolved_name") or "Needs Review"
+    if task.get("commitment_type") == "group" or task.get("raw_assignee", "").lower() in ["team", "all team members"]:
+        assignee_label = "Team"
+    else:
+        assignee_label = task.get("resolved_name") or task.get("raw_assignee") or "Needs Review"
     prefix = task.get("title_prefix") or f"⚡ [{assignee_label}] "
     item_name = f"{prefix}{title}"
     col_values = build_column_values(task, idempotency_key=idempotency_key)

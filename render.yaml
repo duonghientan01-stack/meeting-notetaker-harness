@@ -13,7 +13,7 @@ services:
       - key: LLM_PROVIDER
         value: openai
       - key: LLM_MODEL
-        value: gpt-4o-mini
+        value: gpt-4o
       - key: OPENAI_API_KEY
         sync: false
       - key: BUDGET_CAP_PER_MEETING_USD

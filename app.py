@@ -44,6 +44,12 @@ except (ImportError, ValueError):
 async def lifespan(app: FastAPI):
     """Modern lifespan handler initializing database and tables."""
     db.init_db()
+    # Auto-hydrate Monday users cache on startup so cache is never 0
+    try:
+        synced = sync_users_from_monday()
+        print(f"[Lifespan] Hydrated {len(synced)} Monday users into SQLite cache.")
+    except Exception as e:
+        print(f"[Lifespan Warning] Failed to auto-sync Monday users at startup: {e}")
     yield
 
 # Initialize FastAPI app
@@ -118,6 +124,13 @@ def process_meeting_pipeline(raw_payload: Dict[str, Any], dry_run: bool = False,
     
     # 1. Normalized content hash check
     transcript_list = raw_payload.get("transcript", [])
+    if not transcript_list and raw_payload.get("raw_email_text"):
+        try:
+            from email_parser import parse_transcript_lines
+            transcript_list = parse_transcript_lines(raw_payload["raw_email_text"])
+            raw_payload["transcript"] = transcript_list
+        except Exception:
+            pass
     normalized_text = " ".join([f"{u.get('speaker','')}:{u.get('text','')}" for u in transcript_list])
     content_hash = raw_payload.get("content_hash") or hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
     

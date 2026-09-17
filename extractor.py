@@ -64,6 +64,8 @@ class ExtractedTask(BaseModel):
     priority: str = "Medium"
     priority_source: str = "default" # spoken | default
     workstream: str = DEFAULT_WORKSTREAM
+    phase: str = "Phase 1"
+    technical_context: str = ""
     context_quote: str = ""
     timestamp_offset: str = "00:00:00"
     confidence_score: float = 0.85
@@ -80,7 +82,8 @@ class ExtractionResult(BaseModel):
 CONVERSATIONAL_NOISE_PATTERNS = [
     r"\b(mute|unmute)\b.*\b(mic|microphone|audio)\b",
     r"\b(echo|hear me|hearing me|sound check|can you hear)\b",
-    r"\b(turn on|turn off|share).*\b(camera|screen|video)\b",
+    r"\b(turn on|turn off)\b.*\b(camera|video|mic)\b",
+    r"\b(share|sharing)\s+(?:your\s+|the\s+)?screen\b",
     r"\b(holiday|vacation|leave|time off|out of office|nghỉ phép|đi nghỉ|xin nghỉ|放假|休假)\b",
     r"^\s*(hello|hi|good morning|good afternoon|good evening|bye|goodbye|see you|thanks|thank you|dạ|vâng|cảm ơn|你好|早安|謝謝|再見)[.!\s]*$",
 ]
@@ -88,7 +91,7 @@ CONVERSATIONAL_NOISE_PATTERNS = [
 # Action verbs indicating a real work item
 ACTION_VERBS = [
     # English
-    r"\b(finalize|create|prepare|send|review|submit|publish|build|update|verify|check|draft|confirm|follow up|fix|deploy|design|test|investigate|schedule|contact|order|share|distribute|sync|organize|coordinate|handle|process|arrange|learn|speak|record)\b",
+    r"\b(finalize|create|prepare|send|review|submit|publish|build|update|verify|check|draft|confirm|follow up|fix|deploy|design|test|investigate|schedule|contact|order|share|distribute|sync|organize|coordinate|handle|process|arrange|learn|speak|record|identify|restore|photograph|film|produce|draw|provide|revise|assess)\b",
     # Vietnamese
     r"\b(hoàn thành|tạo|chuẩn bị|gửi|duyệt|đăng|xây dựng|cập nhật|kiểm tra|soạn|xác nhận|triển khai|thiết kế|liên hệ|đặt hàng|chia sẻ|sắp xếp|báo cáo|phối hợp|xử lý)\b",
     # Chinese (no \b for CJK)

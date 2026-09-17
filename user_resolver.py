@@ -23,15 +23,30 @@ except (ImportError, ValueError):
 KNOWN_ALIASES = {
     103551084: ["mike", "mike wong", "boss", "mr wong", "mikewong"],
     113704803: ["leah", "leah kung", "yh kung", "yhkung", "kung"],
-    113703761: ["tan", "duong tan", "duong", "tan duong", "dương tấn", "tấn", "dương", "tan.dh"],
+    113703761: ["tan", "duong tan", "duong", "tan duong", "dương tấn", "tấn", "dương", "tan.dh", "duonghien tan", "duong hien tan", "duonghientan"],
     113703758: ["tt", "thossapong", "thossapong sasipiyanon", "thossa"],
     103982655: ["wayne", "wayne chan", "waynechan"],
     103982654: ["wanlee", "wanlee ng", "wanleeng"],
-    103982652: ["alexa", "alexa chan", "alexachan"],
+    103982652: ["alexa", "alexa chan", "alexachan", "alexa/team", "alexa team"],
     108225291: ["hay son", "hayson", "yung hay son", "haysonyung"],
-    112035594: ["emmy", "emmy chan", "emmychan"],
+    112035594: ["emmy", "emmy chan", "emmychan", "emmy/team", "emmy team"],
     107995985: ["jerry", "jerry chong", "jerrychong"],
     107996894: ["alex", "alex chan", "alexchan"]
+}
+
+# Core team metadata for safe fallback when cache is booting/unhydrated
+CORE_TEAM_DEFAULTS = {
+    103551084: {"name": "Mike Wong", "email": "mikewong@striking.com.hk"},
+    113704803: {"name": "Leah Kung", "email": "yhkung@striking.com.hk"},
+    113703761: {"name": "Duong Tan", "email": "tan.dh@poppingcandy.com.hk"},
+    113703758: {"name": "Thossapong Sasipiyanon", "email": "tt@strikids.com"},
+    103982655: {"name": "Wayne Chan", "email": "waynechan@striking.com.hk"},
+    103982654: {"name": "Wanlee Ng", "email": "wanleeng@striking.com.hk"},
+    103982652: {"name": "Alexa Chan", "email": "alexachan@striking.com.hk"},
+    108225291: {"name": "Hayson Yung", "email": "haysonyung@striking.com.hk"},
+    112035594: {"name": "Emmy Chan", "email": "emmychan@striking.com.hk"},
+    107995985: {"name": "Jerry Chong", "email": "jerrychong@striking.com.hk"},
+    107996894: {"name": "Alex Chan", "email": "alexchan@striking.com.hk"}
 }
 
 # Generic non-person tokens that must NEVER resolve to an individual
@@ -129,8 +144,11 @@ def resolve_assignee(raw_assignee: str, email: Optional[str] = None,
         for alias in aliases:
             norm_alias = normalize_text(alias)
             if norm_target == norm_alias:
-                # Security/F4: Verify that user_id actually exists in active users cache
+                # Security/F4: Verify user exists in active cache (or CORE_TEAM_DEFAULTS when unhydrated)
                 matched_user = next((u for u in users if u["id"] == user_id), None)
+                if not matched_user and (not users or len(users) == 0) and user_id in CORE_TEAM_DEFAULTS:
+                    matched_user = CORE_TEAM_DEFAULTS[user_id]
+
                 if matched_user:
                     return {
                         "resolved_user_id": user_id,

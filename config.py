@@ -73,17 +73,28 @@ WEBHOOK_SECRET = os.environ.get("HAPPYSCRIBE_WEBHOOK_SECRET", None)
 
 # LLM Reasoning Extractor Configuration (§5.2 & §9.3)
 DEFAULT_LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai")  # "openai", "google", "anthropic"
-DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 USE_LLM_EXTRACTOR = os.environ.get("USE_LLM_EXTRACTOR", "true").lower() in ("true", "1", "yes")
 
 # Model Pricing per 1M tokens (USD) for cost_ledger tracking
 MODEL_PRICING = {
+    "gpt-4o": {"input_cost_per_1m": 2.50, "output_cost_per_1m": 10.00},
+    "gpt-4o-mini": {"input_cost_per_1m": 0.15, "output_cost_per_1m": 0.60},
     "gemini-2.5-flash": {"input_cost_per_1m": 0.075, "output_cost_per_1m": 0.30},
     "gemini-1.5-flash": {"input_cost_per_1m": 0.075, "output_cost_per_1m": 0.30},
     "claude-3-5-haiku-20241022": {"input_cost_per_1m": 0.80, "output_cost_per_1m": 4.00},
-    "gpt-4o-mini": {"input_cost_per_1m": 0.15, "output_cost_per_1m": 0.60},
     "default": {"input_cost_per_1m": 0.10, "output_cost_per_1m": 0.40}
 }
 
+# Recognized Monday Workstream Categories
+AVAILABLE_WORKSTREAMS = [
+    "TVC & Creative Video Production",
+    "Digital Marketing & Social Ads",
+    "Automation, Delivery & Reliability",
+    "Operations & Team Coordination",
+    "Sales & Business Development"
+]
+
 # Approval workflow: false = direct sync to Monday intake group; true = await web token digest
 REQUIRE_HUMAN_APPROVAL = os.environ.get("REQUIRE_HUMAN_APPROVAL", "false").lower() in ("true", "1", "yes")
+
