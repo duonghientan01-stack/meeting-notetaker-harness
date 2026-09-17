@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Meeting Intelligence Harness",
     description="Enterprise Action Item Extraction and Monday.com Synchronization for MS Teams & Happy Scribe",
-    version="3.0.0",
+    version="3.2.0",
     lifespan=lifespan
 )
 
@@ -273,7 +273,7 @@ def safe_background_pipeline(payload: Dict[str, Any]):
 def read_root():
     return {
         "service": "Meeting Intelligence Harness",
-        "version": "3.0.0",
+        "version": "3.2.0",
         "mode": "Shadow / Assisted Mode",
         "target_board": config.BOARD_ID,
         "docs_url": "/docs"
@@ -291,7 +291,7 @@ def health_check():
     
     return {
         "status": "HEALTHY",
-        "version": "3.0.0",
+        "version": "3.2.0",
         "mode": "Shadow / Assisted Mode",
         "database": str(config.SQLITE_DB_PATH),
         "active_users_cached": len(users),
