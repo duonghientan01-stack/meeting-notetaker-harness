@@ -37,11 +37,11 @@ KNOWN_ALIASES = {
 # Core team metadata for safe fallback when cache is booting/unhydrated
 CORE_TEAM_DEFAULTS = {
     103551084: {"name": "Mike Wong", "email": "mikewong@striking.com.hk"},
-    113704803: {"name": "Leah Kung", "email": "yhkung@striking.com.hk"},
+    113704803: {"name": "Leah", "email": "yhkung@striking.com.hk"},
     113703761: {"name": "Duong Tan", "email": "tan.dh@poppingcandy.com.hk"},
     113703758: {"name": "Thossapong Sasipiyanon", "email": "tt@strikids.com"},
     103982655: {"name": "Wayne Chan", "email": "waynechan@striking.com.hk"},
-    103982654: {"name": "Wanlee Ng", "email": "wanleeng@striking.com.hk"},
+    103982654: {"name": "Wanlee", "email": "wanleeng@striking.com.hk"},
     103982652: {"name": "Alexa Chan", "email": "alexachan@striking.com.hk"},
     108225291: {"name": "Hayson Yung", "email": "haysonyung@striking.com.hk"},
     112035594: {"name": "Emmy Chan", "email": "emmychan@striking.com.hk"},

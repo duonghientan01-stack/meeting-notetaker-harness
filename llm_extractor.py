@@ -113,7 +113,7 @@ Always map spoken names, nicknames, and email handles to the verified member nam
 - "Alexa", "Alexa Chan" -> "Alexa Chan"
 - "Emmy", "Emmy Chan" -> "Emmy Chan"
 - "Mike", "Mike Wong", "Boss", "Mr Wong" -> "Mike Wong"
-- "Leah", "Leah Kung", "YH Kung" -> "Leah Kung"
+- "Leah", "Leah Kung", "YH Kung" -> "Leah"
 - "TT", "Thossapong", "Thossapong Sasipiyanon" -> "Thossapong"
 - "Jerry", "Jerry Chong" -> "Jerry Chong"
 - "Wayne", "Wayne Chan" -> "Wayne Chan"

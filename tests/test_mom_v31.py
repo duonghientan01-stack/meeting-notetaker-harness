@@ -192,7 +192,7 @@ class TestMoMUpgradeV31(unittest.TestCase):
         self.assertIn("Sharp block-like popping candy", html_update)
         self.assertIn("Monitor(s):", html_update)
         self.assertIn("Alexa Chan", html_update)
-        self.assertIn("Leah Kung", html_update)
+        self.assertIn("Leah", html_update)
         
         # Clean naming without person name prefix and without [Needs Review]
         res_sync = monday_syncer.sync_task_to_monday(task, dry_run=True)

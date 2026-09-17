@@ -197,7 +197,7 @@ def build_html_update(task: Dict[str, Any], meeting_meta: Optional[Dict[str, Any
     id_name_map = {
         103551084: "Mike Wong (Executive / Workflow)",
         103982652: "Alexa Chan (Marketing)",
-        113704803: "Leah Kung (Marketing)",
+        113704803: "Leah (Marketing)",
         113703761: "Duong Tan"
     }
     monitors_str = html.escape(", ".join([id_name_map.get(mid, f"User #{mid}") for mid in monitor_ids]))
