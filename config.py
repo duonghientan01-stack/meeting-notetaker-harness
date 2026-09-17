@@ -29,6 +29,17 @@ USER_GROUP_MAP = {
     113703758: "group_mm6w488g",  # 🔵 TT task
 }
 
+# Striking C-Team Monitor Roles
+MONITOR_MIKE_WONG = 103551084    # Executive Oversight / Company Workflows
+MONITOR_ALEXA_CHAN = 103982652   # Marketing / Creative / TVC
+MONITOR_LEAH_KUNG = 113704803    # Marketing / Operations
+DEFAULT_MARKETING_MONITORS = [MONITOR_ALEXA_CHAN, MONITOR_LEAH_KUNG]  # Alexa & Leah
+DEFAULT_WORKFLOW_MONITORS = [MONITOR_MIKE_WONG]                      # Mike Wong
+
+# Title Formatting Preferences
+INCLUDE_PERSON_PREFIX_IN_TITLE = False  # Person name prefix in title is redundant with Assignee column
+INCLUDE_AI_BADGE_IN_TITLE = True        # Keep lightning bolt prefix ⚡
+
 # Immutable Column IDs for Board 5102468049 (Verified from live board query)
 COLUMNS = {
     "assign_to": "multiple_person_mm523asb",      # "Owner" (people)

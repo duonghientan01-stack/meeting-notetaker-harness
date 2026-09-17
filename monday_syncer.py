@@ -83,6 +83,27 @@ def check_monday_item_exists(item_name: str, group_id: str, monday_client=None) 
         pass
     return None
 
+def determine_monitors(workstream: Optional[str] = None, task: Optional[Dict[str, Any]] = None, meeting_title: str = "") -> List[int]:
+    """
+    Determine monitor IDs based on Striking C-Team Governance:
+    - Marketing, TVC, Creative, Social Ads, Media, Branding -> Alexa Chan (103982652) & Leah Kung (113704803)
+    - Company Workflows, Automation, Operations, Systems, or General -> Mike Wong (103551084)
+    """
+    ws = (workstream or "").lower()
+    title = (meeting_title or "").lower()
+    task_text = str(task.get("title", "") if task else "").lower()
+    combined = f"{ws} {title} {task_text}"
+    
+    # Marketing / Creative / TVC / Social Ads / Media / Influencer
+    if any(k in combined for k in [
+        "marketing", "tvc", "creative", "video", "social", "ad", "ads", "storyboard",
+        "illustration", "influencer", "campaign", "candy", "content", "pr", "drawing", "audio"
+    ]):
+        return list(getattr(config, "DEFAULT_MARKETING_MONITORS", [103982652, 113704803]))
+        
+    # Company Workflows / Systems / Automation / Executive Oversight
+    return list(getattr(config, "DEFAULT_WORKFLOW_MONITORS", [103551084]))
+
 def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
     """Assemble column value payload using verified immutable column IDs."""
     col_vals = {}
@@ -108,11 +129,19 @@ def build_column_values(task: Dict[str, Any], idempotency_key: Optional[str] = N
         "personsAndTeams": [{"id": int(user_id), "kind": "person"}]
     }
 
-    # 1b. Monitor assignment - default to monitor/coordinator; monitor can adjust later
-    monitor_id = task.get("monitor_user_id") or DEFAULT_OWNER_ID
-    if monitor_id and "monitor" in COLUMNS:
+    # 1b. Monitor assignment - C-Team Governance
+    monitor_ids = task.get("monitor_user_ids")
+    if not monitor_ids:
+        if task.get("monitor_user_id"):
+            monitor_ids = [task["monitor_user_id"]]
+        else:
+            meeting_title = task.get("meeting_title", "")
+            workstream_val = task.get("workstream") or config.DEFAULT_WORKSTREAM
+            monitor_ids = determine_monitors(workstream=workstream_val, task=task, meeting_title=meeting_title)
+
+    if monitor_ids and "monitor" in COLUMNS:
         col_vals[COLUMNS["monitor"]] = {
-            "personsAndTeams": [{"id": int(monitor_id), "kind": "person"}]
+            "personsAndTeams": [{"id": int(mid), "kind": "person"} for mid in monitor_ids]
         }
         
     # 2. Due Date (date_mm6v7v2x) - only if present
@@ -159,6 +188,20 @@ def build_html_update(task: Dict[str, Any], meeting_meta: Optional[Dict[str, Any
     workstream_str = html.escape(str(task.get("workstream", config.DEFAULT_WORKSTREAM)))
     phase_str = html.escape(str(task.get("phase", "Phase 1")))
     
+    # Monitor resolution for HTML card
+    monitor_ids = task.get("monitor_user_ids") or ([task["monitor_user_id"]] if task.get("monitor_user_id") else None)
+    if not monitor_ids:
+        workstream_val = task.get("workstream") or config.DEFAULT_WORKSTREAM
+        monitor_ids = determine_monitors(workstream=workstream_val, task=task, meeting_title=raw_meeting_title)
+    
+    id_name_map = {
+        103551084: "Mike Wong (Executive / Workflow)",
+        103982652: "Alexa Chan (Marketing)",
+        113704803: "Leah Kung (Marketing)",
+        113703761: "Duong Tan"
+    }
+    monitors_str = html.escape(", ".join([id_name_map.get(mid, f"User #{mid}") for mid in monitor_ids]))
+
     # Technical Guidelines / Context block
     tech_context = task.get("technical_context") or ""
     tech_context_html = f'<div style="background:#f0f7ff;border-left:4px solid #0073ea;padding:10px;margin-bottom:12px;border-radius:4px;"><b>🛠️ Technical Guidelines & Context:</b><br>{html.escape(tech_context)}</div>' if tech_context else ''
@@ -180,6 +223,7 @@ def build_html_update(task: Dict[str, Any], meeting_meta: Optional[Dict[str, Any
 <ul>
   <li><b>Phase:</b> {phase_str}</li>
   <li><b>Assignee:</b> {assigned_info} (Resolution: <code>{tier_info}</code>, Confidence: {confidence:.0f}%)</li>
+  <li><b>👀 Monitor(s):</b> {monitors_str}</li>
   <li><b>Due Date:</b> {due_date_str}</li>
   <li><b>Priority:</b> {priority_str}</li>
   <li><b>Workstream:</b> {workstream_str}</li>
@@ -224,11 +268,18 @@ def sync_task_to_monday(task: Dict[str, Any], meeting_meta: Optional[Dict[str, A
     
     # Target group: Post to dedicated Intake staging group so reviewer can review and move to proper board/group
     target_group = INTAKE_GROUP_ID
-    if task.get("commitment_type") == "group" or task.get("raw_assignee", "").lower() in ["team", "all team members"]:
-        assignee_label = "Team"
+    if task.get("title_prefix"):
+        prefix = task["title_prefix"]
+    elif not resolved_user_id or task.get("resolved_name") == "Needs Review":
+        prefix = "⚡ [Needs Review] "
+    elif getattr(config, "INCLUDE_PERSON_PREFIX_IN_TITLE", False):
+        assignee_label = task.get("resolved_name") or task.get("raw_assignee") or ""
+        prefix = f"⚡ [{assignee_label}] " if assignee_label else "⚡ "
+    elif getattr(config, "INCLUDE_AI_BADGE_IN_TITLE", True):
+        prefix = "⚡ "
     else:
-        assignee_label = task.get("resolved_name") or task.get("raw_assignee") or "Needs Review"
-    prefix = task.get("title_prefix") or f"⚡ [{assignee_label}] "
+        prefix = ""
+
     item_name = f"{prefix}{title}"
     col_values = build_column_values(task, idempotency_key=idempotency_key)
     

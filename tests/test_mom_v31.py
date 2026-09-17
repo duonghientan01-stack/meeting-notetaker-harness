@@ -179,16 +179,25 @@ class TestMoMUpgradeV31(unittest.TestCase):
         self.assertEqual(cols[config.COLUMNS["due_date"]]["date"], "2026-09-21")
         self.assertEqual(cols[config.COLUMNS["assign_to"]]["personsAndTeams"][0]["id"], 112035594)
         
+        # Verify Monitor column for TVC (Alexa & Leah)
+        monitors = [p["id"] for p in cols[config.COLUMNS["monitor"]]["personsAndTeams"]]
+        self.assertIn(config.MONITOR_ALEXA_CHAN, monitors)
+        self.assertIn(config.MONITOR_LEAH_KUNG, monitors)
+        
         # HTML Update
         html_update = monday_syncer.build_html_update(task, {"title": "TVC 30S Strikids"})
         self.assertIn("TVC &amp; Creative Video Production", html_update)
         self.assertIn("Phase 2: Character Illustrations", html_update)
         self.assertIn("Technical Guidelines & Context", html_update)
         self.assertIn("Sharp block-like popping candy", html_update)
+        self.assertIn("Monitor(s):", html_update)
+        self.assertIn("Alexa Chan", html_update)
+        self.assertIn("Leah Kung", html_update)
         
-        # Clean naming without [Needs Review]
+        # Clean naming without person name prefix and without [Needs Review]
         res_sync = monday_syncer.sync_task_to_monday(task, dry_run=True)
-        self.assertIn("⚡ [Emmy Chan] Create or revise character illustrations", res_sync["item_name"])
+        self.assertEqual("⚡ Create or revise character illustrations", res_sync["item_name"])
+        self.assertNotIn("Emmy Chan", res_sync["item_name"])
         self.assertNotIn("Needs Review", res_sync["item_name"])
 
 if __name__ == "__main__":

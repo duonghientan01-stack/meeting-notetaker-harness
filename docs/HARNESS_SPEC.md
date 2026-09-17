@@ -43,13 +43,16 @@ Upgrade the harness to **v3.1** with:
 
 ### Outputs
 - **Monday.com Items** created in `NEW — Cross-Department Intake` (`group_mm6w83gk`) on Board `5102468049`.
-  - **Item Name:** `⚡ [Assignee Name] Task Title` (e.g. `⚡ [Alexa Chan] Send updated script and audio materials`).
+  - **Item Name:** `⚡ Task Title` (clean imperative action verb, no redundant person name prefix since Owner column explicitly displays assignee).
   - **Owner (`multiple_person_mm523asb`):** Exact verified Monday User ID.
+  - **👀 Monitor (`multiple_person_mm6w75qm`):**
+    - Marketing, TVC, Creative Video, Social Ads, Influencer ➔ **Alexa Chan (`103982652`)** & **Leah Kung (`113704803`)**.
+    - Company Workflows, Automation, Operations, Systems, or Executive Oversight ➔ **Mike Wong (`103551084`)**.
   - **Due Date (`date_mm6v7v2x`):** Explicit or relative date calculated from meeting reference date.
   - **Priority (`color_mm6cawvp`):** High / Medium / Low.
   - **Workstream (`text_mm6c9xj9`):** Dynamically inferred (e.g. `TVC & Creative Video Production`).
   - **Status (`color_mm5ken0m`):** `Not Started`.
-  - **Rich HTML Update Thread:** Full context quote, technical guidelines, phase category, and recording URL.
+  - **Rich HTML Update Thread:** Full context quote, technical guidelines, phase category, monitor summary, and recording URL.
 - **Persistent State:** SQLite database entries for meeting records, task items, cost ledger, and audit events.
 
 ---
